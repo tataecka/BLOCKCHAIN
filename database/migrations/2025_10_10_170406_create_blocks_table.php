@@ -1,0 +1,32 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('blocks', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('index_no');
+            $table->string('previous_hash');
+            $table->string('current_hash');
+            $table->integer('nonce');
+            $table->timestamp('timestamp');
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('blocks');
+    }
+};

@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@media (max-width: 768px) {
+  .ml-64 {
+    margin-left: 0 !important;
+  }
+  .fixed.left-0 {
+    display: none;
+  }
+  .mobile-nav {
+    display: block;
+  }
+}
