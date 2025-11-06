@@ -17,7 +17,10 @@ class BlockchainService
 
     public function mineBlock()
     {
-        $pendingTransactions = Transaction::where('status', 'pending')->get();
+        $pendingTransactions = Transaction::where('status', 'pending')
+            ->orderBy('id') 
+            ->get();
+
         if ($pendingTransactions->isEmpty()) {
             return null;
         }
@@ -32,11 +35,15 @@ class BlockchainService
         $hash = '';
 
         do {
+            $transactionData = $pendingTransactions->sortBy('id')->map->only([
+                'id', 'sender', 'receiver', 'amount', 'timestamp'
+            ])->values(); 
+
             $blockData = [
                 'index' => $index,
                 'timestamp' => $timestamp->toISOString(),
                 'previous_hash' => $previousHash,
-                'transactions' => $pendingTransactions->map->only(['id', 'sender', 'receiver', 'amount', 'timestamp']),
+                'transactions' => $transactionData,
                 'nonce' => $nonce
             ];
 
@@ -44,7 +51,6 @@ class BlockchainService
             $nonce++;
         } while (!$this->isValidHash($hash));
 
-        // Save block
         $block = Block::create([
             'index_no' => $index,
             'previous_hash' => $previousHash,
@@ -53,7 +59,6 @@ class BlockchainService
             'timestamp' => $timestamp
         ]);
 
-        // Attach transactions & mark as mined
         foreach ($pendingTransactions as $tx) {
             $block->transactions()->attach($tx->id);
             $tx->update(['status' => 'mined']);
@@ -69,14 +74,13 @@ class BlockchainService
 
     public function validateChain(): bool
     {
-        $blocks = Block::orderBy('index_no')->get();
+        $blocks = Block::with('transactions')->orderBy('index_no')->get();
 
         if ($blocks->isEmpty()) {
             Log::info('Blockchain is empty — considered valid.');
             return true;
         }
 
-        // Validate genesis block
         if ($blocks[0]->previous_hash !== '0') {
             Log::error('Genesis block validation failed', [
                 'block_id' => $blocks[0]->id,
@@ -87,30 +91,29 @@ class BlockchainService
             return false;
         }
 
-        // Validate each subsequent block
         for ($i = 1; $i < count($blocks); $i++) {
             $current = $blocks[$i];
             $previous = $blocks[$i - 1];
 
-            // 1. Check hash linkage
             if ($current->previous_hash !== $previous->current_hash) {
                 Log::error('Block hash linkage broken', [
                     'block_id' => $current->id,
                     'index_no' => $current->index_no,
                     'expected_previous_hash' => $previous->current_hash,
                     'actual_previous_hash' => $current->previous_hash,
-                    'previous_block_id' => $previous->id,
-                    'previous_block_hash' => $previous->current_hash
                 ]);
                 return false;
             }
 
-            // 2. Re-compute hash and verify integrity
+            $transactionData = $current->transactions->sortBy('id')->map->only([
+                'id', 'sender', 'receiver', 'amount', 'timestamp'
+            ])->values();
+
             $expectedData = [
                 'index' => $current->index_no,
                 'timestamp' => $current->timestamp->toISOString(),
                 'previous_hash' => $current->previous_hash,
-                'transactions' => $current->transactions->map->only(['id', 'sender', 'receiver', 'amount', 'timestamp']),
+                'transactions' => $transactionData,
                 'nonce' => $current->nonce
             ];
 
@@ -122,14 +125,12 @@ class BlockchainService
                     'index_no' => $current->index_no,
                     'expected_hash' => $expectedHash,
                     'actual_hash' => $current->current_hash,
-                    'nonce' => $current->nonce,
-                    'transaction_count' => $current->transactions->count()
                 ]);
                 return false;
             }
         }
 
-        Log::info('Blockchain validation passed — chain is secure.');
+        Log::info('Blockchain validation passed — chain is valid.');
         return true;
     }
 }
